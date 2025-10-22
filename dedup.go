@@ -3,8 +3,24 @@ package imagededup
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+
+	_ "embed"
+)
+
+var (
+	//go:embed find_duplicates.py
+	findDuplicatesScript string
+
+	//go:embed find_duplicates_to_remove.py
+	findDuplicatesToRemoveScript string
+)
+
+const (
+	findDuplicatesScriptName         = "find_duplicates.py"
+	findDuplicatesToRemoveScriptName = "find_duplicates_to_remove.py"
 )
 
 type (
@@ -18,6 +34,22 @@ type (
 		Score    float64 `json:"score"`
 	}
 )
+
+// 将嵌入的脚本写入临时文件
+func writeScriptToTemp(name, script string) (string, error) {
+	tmpFile := os.TempDir() + "/" + name
+
+	_, err := os.Stat(tmpFile)
+	if err == nil {
+		return tmpFile, nil
+	}
+
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	return tmpFile, os.WriteFile(tmpFile, []byte(script), 0755)
+}
 
 func runPythonScript(scriptPath string, args ...string) ([]byte, error) {
 	cmd := exec.Command("bash", "-c", fmt.Sprintf("python %s %s", scriptPath, strings.Join(args, " ")))
@@ -39,8 +71,14 @@ func runPythonScript(scriptPath string, args ...string) ([]byte, error) {
 }
 
 func FindDuplicates(algorithm, imageDir string) (map[string]DuplicateResult, error) {
+	// 将嵌入的脚本写入临时文件
+	scriptPath, err := writeScriptToTemp(findDuplicatesScriptName, findDuplicatesScript)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp script: %w", err)
+	}
+
 	// 运行 Python 脚本
-	output, err := runPythonScript("find_duplicates.py", algorithm, imageDir)
+	output, err := runPythonScript(scriptPath, algorithm, imageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run Python script: %w", err)
 	}
@@ -55,7 +93,13 @@ func FindDuplicates(algorithm, imageDir string) (map[string]DuplicateResult, err
 }
 
 func FindDuplicatesToRemove(algorithm, imageDir string) ([]string, error) {
-	output, err := runPythonScript("find_duplicates_to_remove.py", algorithm, imageDir)
+	// 将嵌入的脚本写入临时文件
+	scriptPath, err := writeScriptToTemp(findDuplicatesToRemoveScriptName, findDuplicatesToRemoveScript)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp script: %w", err)
+	}
+
+	output, err := runPythonScript(scriptPath, algorithm, imageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run Python script: %w", err)
 	}
