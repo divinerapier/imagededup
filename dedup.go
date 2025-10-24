@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	//go:embed find_duplicates.py
+	//go:embed python_src/find_duplicates.py
 	findDuplicatesScript string
 
-	//go:embed find_duplicates_to_remove.py
+	//go:embed python_src/find_duplicates_to_remove.py
 	findDuplicatesToRemoveScript string
 )
 
@@ -33,6 +33,16 @@ type (
 		Filename string  `json:"filename"`
 		Score    float64 `json:"score"`
 	}
+
+	Algorithm string
+)
+
+const (
+	AlgorithmPHasher Algorithm = "phasher"
+	AlgorithmCNN     Algorithm = "cnn"
+	AlgorithmDHash   Algorithm = "dhash"
+	AlgorithmAHash   Algorithm = "ahash"
+	AlgorithmWHash   Algorithm = "whash"
 )
 
 // 将嵌入的脚本写入临时文件
@@ -70,7 +80,7 @@ func runPythonScript(scriptPath string, args ...string) ([]byte, error) {
 	return []byte(stdout.String()), nil
 }
 
-func FindDuplicates(algorithm, imageDir string) (map[string]DuplicateResult, error) {
+func FindDuplicates(algorithm Algorithm, imageDir string) (map[string]DuplicateResult, error) {
 	// 将嵌入的脚本写入临时文件
 	scriptPath, err := writeScriptToTemp(findDuplicatesScriptName, findDuplicatesScript)
 	if err != nil {
@@ -78,7 +88,7 @@ func FindDuplicates(algorithm, imageDir string) (map[string]DuplicateResult, err
 	}
 
 	// 运行 Python 脚本
-	output, err := runPythonScript(scriptPath, algorithm, imageDir)
+	output, err := runPythonScript(scriptPath, string(algorithm), imageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run Python script: %w", err)
 	}
@@ -92,14 +102,14 @@ func FindDuplicates(algorithm, imageDir string) (map[string]DuplicateResult, err
 	return result, nil
 }
 
-func FindDuplicatesToRemove(algorithm, imageDir string) ([]string, error) {
+func FindDuplicatesToRemove(algorithm Algorithm, imageDir string) ([]string, error) {
 	// 将嵌入的脚本写入临时文件
 	scriptPath, err := writeScriptToTemp(findDuplicatesToRemoveScriptName, findDuplicatesToRemoveScript)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp script: %w", err)
 	}
 
-	output, err := runPythonScript(scriptPath, algorithm, imageDir)
+	output, err := runPythonScript(scriptPath, string(algorithm), imageDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run Python script: %w", err)
 	}

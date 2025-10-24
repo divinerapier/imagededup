@@ -11,3 +11,6 @@ wheels/
 
 # Test data
 tests/data/
+
+# Generated Python packages
+internal/data/

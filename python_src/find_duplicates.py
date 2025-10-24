@@ -51,6 +51,22 @@ class DuplicateResult:
     def to_json(self):
         return json.dumps(self.to_dict(), indent=4)
 
+
+def find_duplicates(algorithm_name: str, image_dir: Path) -> Dict[str, DuplicateResult]:
+    algorithm = create_algorithm(name=algorithm_name)
+    duplicates_dict: Dict[str, DuplicateResult] = {}
+    duplicates = algorithm.find_duplicates(image_dir=image_dir, scores=True)
+    for filename, duplicate_list in duplicates.items():
+        duplicate_result = DuplicateResult(filename=filename, duplicate_list=[])
+        for duplicate in duplicate_list:
+            duplicate_result.add_duplicate(filename=duplicate[0], score=float(duplicate[1]))
+        duplicates_dict[filename] = duplicate_result
+    
+    # 将 DuplicateResult 对象转换为字典进行 JSON 序列化
+    return {filename: result.to_dict() for filename, result in duplicates_dict.items()}
+
+
+
 if __name__ == '__main__':
     algorithm_name = sys.argv[1]
     dir = sys.argv[2]
