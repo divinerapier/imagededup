@@ -3,7 +3,7 @@ module github.com/divinerapier/imagededup
 go 1.24.3
 
 require (
-	github.com/kluctl/go-embed-python v0.0.0-3.12.8-20241219-1
+	github.com/divinerapier/go-embed-python v0.0.0-3.12.8-20241219-3
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 )

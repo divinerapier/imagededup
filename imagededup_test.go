@@ -15,7 +15,7 @@ func TestFindDuplicates(t *testing.T) {
 
 	defer dedup.Cleanup()
 
-	results, err := dedup.FindDuplicates(imagededup.AlgorithmCNN, "testdata/datasets")
+	results, err := dedup.FindDuplicates(imagededup.AlgorithmCNN, "tests/data/datasets")
 	require.NoError(t, err)
-	require.Empty(t, results)
+	require.NotEmpty(t, results)
 }

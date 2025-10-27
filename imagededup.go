@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/divinerapier/go-embed-python/embed_util"
+	"github.com/divinerapier/go-embed-python/python"
 	"github.com/divinerapier/imagededup/internal/data"
 	"github.com/divinerapier/imagededup/python_src"
-	"github.com/kluctl/go-embed-python/embed_util"
-	"github.com/kluctl/go-embed-python/python"
 	"github.com/rs/zerolog/log"
 )
 
@@ -55,7 +55,7 @@ func NewImageDedup(parallelism int) (*ImageDedup, error) {
 	}
 
 	// 选择一个可用端口
-	serverPort := 8000
+	serverPort := 18000
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", serverPort)
 
 	dedup := &ImageDedup{

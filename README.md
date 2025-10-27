@@ -1,14 +1,13 @@
 # Image Deduplicate
 
-A powerful Go library for finding and removing duplicate images using various algorithms. This library combines the efficiency of Go with the advanced image processing capabilities of Python's `imagededup` library.
+A powerful Go library for finding and removing duplicate images using various algorithms. This library embeds Python and the `imagededup` library directly into your Go binary, providing a self-contained solution with no external dependencies required at runtime.
 
 ## Features
 
-- 🚀 **High Performance**: Built with Go for fast execution
-- 🧠 **Multiple Algorithms**: Support for various image hashing algorithms
-- 📦 **Self-Contained**: Python scripts embedded in Go binary
-- 🐳 **Docker Ready**: Complete Docker support with pre-configured environment
-- 🔧 **Easy Integration**: Simple API for Go applications
+- 🚀 **High Performance**: Built with Go, with embedded Python runtime
+- 🧠 **Multiple Algorithms**: Support for various image hashing algorithms (PHasher, CNN, DHash, AHash, WHash)
+- 📦 **Self-Contained**: Complete Python environment and `imagededup` library embedded in Go binary
+- 🔧 **Thread Pool**: Configurable parallelism for concurrent operations
 - 📊 **Detailed Results**: Comprehensive duplicate detection with similarity scores
 
 ## Supported Algorithms
@@ -21,17 +20,13 @@ A powerful Go library for finding and removing duplicate images using various al
 
 ## Prerequisites
 
-- Python 3.12+
-- imagededup package: `pip install imagededup`
+- Go 1.19+
+- No Python installation required at runtime (embedded)
 
 ## Installation
 
 ```bash
 go get github.com/divinerapier/imagededup
-
-uv venv
-source .venv/bin/activate 
-uv pip install imagededup
 ```
 
 ## Quick Start
@@ -48,19 +43,28 @@ import (
 )
 
 func main() {
-    // Find duplicates using perceptual hashing
-    result, err := imagededup.FindDuplicates(
-        imagededup.AlgorithmPHasher, 
+    // Create an ImageDedup instance with parallelism level
+    // Parallelism controls the number of concurrent HTTP client threads
+    dedup, err := imagededup.NewImageDedup(4)
+    if err != nil {
+        log.Fatalf("failed to create ImageDedup: %v", err)
+    }
+    defer dedup.Close()
+    defer dedup.Cleanup()
+
+    // Find duplicates using CNN algorithm
+    results, err := dedup.FindDuplicates(
+        imagededup.AlgorithmCNN, 
         "/path/to/your/images"
     )
     if err != nil {
-        log.Fatal(err)
+        log.Fatalf("failed to find duplicates: %v", err)
     }
     
     // Print results
-    for filename, duplicates := range result {
-        fmt.Printf("File: %s has %d duplicates\n", filename, len(duplicates.DuplicateList))
-        for _, dup := range duplicates.DuplicateList {
+    for _, result := range results {
+        fmt.Printf("File: %s has %d duplicates\n", result.Filename, len(result.DuplicateList))
+        for _, dup := range result.DuplicateList {
             fmt.Printf("  - %s (similarity: %.2f)\n", dup.Filename, dup.Score)
         }
     }
@@ -71,8 +75,8 @@ func main() {
 
 ```go
 // Get list of files that should be removed (keeping one from each duplicate group)
-filesToRemove, err := imagededup.FindDuplicatesToRemove(
-    imagededup.AlgorithmCNN, 
+filesToRemove, err := dedup.FindDuplicatesToRemove(
+    imagededup.AlgorithmPHasher, 
     "/path/to/your/images"
 )
 if err != nil {
@@ -80,6 +84,9 @@ if err != nil {
 }
 
 fmt.Printf("Found %d files that can be safely removed\n", len(filesToRemove))
+for _, file := range filesToRemove {
+    fmt.Println(file)
+}
 ```
 
 ## Docker Usage
@@ -90,9 +97,11 @@ fmt.Printf("Found %d files that can be safely removed\n", len(filesToRemove))
 # Build the Docker image
 docker build -t imagededup .
 
-# Run with your images
-docker run -v /path/to/your/images:/app/data imagededup phasher /app/data
+# Run with your images mounted
+docker run -v /path/to/your/images:/app/data imagededup
 ```
+
+Note: The Docker image includes the full Python environment and all dependencies pre-installed.
 
 ## Algorithm Comparison
 
@@ -104,31 +113,40 @@ docker run -v /path/to/your/images:/app/data imagededup phasher /app/data
 | AHash     | Fast  | Medium   | Basic similarity |
 | WHash     | Fast  | Medium   | Wavelet-based similarity |
 
-## Requirements
+## Architecture
 
-### Runtime Requirements
-- Go 1.19+
-- Python 3.12+ (for embedded scripts)
-- imagededup Python package (automatically handled)
+This library uses a unique architecture:
 
-### Development Requirements
+1. **Embedded Python**: The complete Python runtime and `imagededup` library are embedded in the Go binary
+2. **HTTP Communication**: Go communicates with Python via an internal HTTP server
+3. **Thread Pool**: Configurable concurrent HTTP clients for parallel operations
+4. **Resource Management**: Automatic cleanup of temporary files and processes
+
+### Requirements
+
+### Runtime
 - Go 1.19+
-- Docker (optional, for containerized deployment)
+- No external dependencies
+
+### Development (for building embedded binaries)
+- Go 1.19+
+- Docker (for building Docker images)
 
 ## Performance Tips
 
-1. **Use PHasher for most cases**: Good balance of speed and accuracy
-2. **Use CNN for critical applications**: Highest accuracy but slower
-3. **Process in batches**: For large datasets, consider processing in chunks
-4. **Use Docker**: Pre-configured environment with all dependencies
+1. **Adjust parallelism**: Use `NewImageDedup(n)` where `n` is the number of concurrent operations
+2. **Use PHasher for most cases**: Good balance of speed and accuracy
+3. **Use CNN for critical applications**: Highest accuracy but slower
+4. **Memory management**: Call `Cleanup()` and `Close()` to free resources
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Python not found**: Ensure Python 3.12+ is installed and in PATH
-2. **imagededup package missing**: The library handles this automatically
-3. **Permission errors**: Ensure the image directory is readable
+1. **Port already in use**: The library uses port 18000 by default for internal HTTP server
+2. **Permission errors**: Ensure the image directory is readable
+3. **Memory issues**: Reduce parallelism level if running out of memory
+4. **Initialization timeout**: Server health check waits up to 5 minutes for startup
 
 ## Contributing
 

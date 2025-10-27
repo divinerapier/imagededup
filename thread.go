@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -41,95 +39,6 @@ type ImageDedupThread struct {
 	baseURL    string
 	client     *http.Client
 	serverPort int
-}
-
-func NewImageDedupThread(dedup *ImageDedup) (*ImageDedupThread, error) {
-	// 选择一个可用端口
-	port := 8000
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	thread := &ImageDedupThread{
-		dedup:      dedup,
-		baseURL:    baseURL,
-		serverPort: port,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-
-	// 启动 Python API 服务器
-	if err := thread.startAPIServer(); err != nil {
-		return nil, fmt.Errorf("failed to start API server: %w", err)
-	}
-
-	// 等待服务器启动并检查健康状态
-	if err := thread.waitForServer(); err != nil {
-		return nil, fmt.Errorf("server health check failed: %w", err)
-	}
-
-	log.Info().Str("baseURL", baseURL).Msg("API server started successfully")
-	return thread, nil
-}
-
-func (t *ImageDedupThread) startAPIServer() error {
-	// 构建启动命令
-	args := []string{
-		filepath.Join(t.dedup.source.GetExtractedPath(), "main.py"),
-		"--port", fmt.Sprintf("%d", t.serverPort),
-		"--host", "127.0.0.1",
-	}
-
-	log.Info().Str("args", strings.Join(args, " ")).Msg("starting python API server")
-
-	// 使用嵌入的 Python 环境启动服务器
-	cmd, err := t.dedup.engine.PythonCmd(args...)
-	if err != nil {
-		return err
-	}
-
-	// 将 stderr 重定向到日志
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-
-	t.cmd = cmd
-
-	// 启动进程
-	if err := t.cmd.Start(); err != nil {
-		return err
-	}
-
-	log.Info().Int("pid", t.cmd.Process.Pid).Msg("python API server process started")
-	return nil
-}
-
-func (t *ImageDedupThread) waitForServer() error {
-	maxRetries := 30
-	retryInterval := 1 * time.Second
-
-	for i := 0; i < maxRetries; i++ {
-		if err := t.healthCheck(); err == nil {
-			return nil
-		}
-
-		log.Info().Int("attempt", i+1).Int("max_retries", maxRetries).Msg("waiting for server to be ready")
-		time.Sleep(retryInterval)
-	}
-
-	return fmt.Errorf("server failed to start after %d attempts", maxRetries)
-}
-
-func (t *ImageDedupThread) healthCheck() error {
-	resp, err := t.client.Get(t.baseURL + "/health")
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("health check failed with status: %d", resp.StatusCode)
-	}
-
-	return nil
 }
 
 func (t *ImageDedupThread) executeFindDuplicates(algorithm Algorithm, imageDir string) ([]DuplicateResult, error) {
@@ -184,7 +93,7 @@ func (t *ImageDedupThread) executeFindDuplicatesToRemove(algorithm Algorithm, im
 	return response.Data, nil
 }
 
-func (t *ImageDedupThread) sendHTTPRequest(method, endpoint string, requestBody interface{}, response interface{}) error {
+func (t *ImageDedupThread) sendHTTPRequest(method, endpoint string, requestBody, response any) error {
 	// 序列化请求体
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
@@ -193,7 +102,6 @@ func (t *ImageDedupThread) sendHTTPRequest(method, endpoint string, requestBody 
 
 	// 构建 URL
 	url := t.baseURL + endpoint
-	// log.Info().Str("method", method).Str("url", url).Str("body", string(jsonData)).Msg("sending HTTP request")
 
 	// 创建 HTTP 请求
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(jsonData))
@@ -216,8 +124,6 @@ func (t *ImageDedupThread) sendHTTPRequest(method, endpoint string, requestBody 
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// log.Info().Int("status_code", resp.StatusCode).Str("response", string(body)).Msg("received HTTP response")
 
 	// 检查 HTTP 状态码
 	if resp.StatusCode != http.StatusOK {
@@ -249,10 +155,12 @@ func (t *ImageDedupThread) Close() {
 			done <- t.cmd.Wait()
 		}()
 
+		timeout := time.NewTimer(5 * time.Second)
+		defer timeout.Stop()
 		select {
 		case <-done:
 			log.Info().Msg("python API server process terminated gracefully")
-		case <-time.After(5 * time.Second):
+		case <-timeout.C:
 			log.Warn().Msg("python API server process did not terminate gracefully, force killing")
 			_ = t.cmd.Process.Kill()
 			<-done // 等待强制终止完成

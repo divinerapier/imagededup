@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/kluctl/go-embed-python/pip"
+	"github.com/divinerapier/go-embed-python/pip"
 )
 
 func main() {
